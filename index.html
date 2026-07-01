@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>주간업무 로드맵 뷰어</title>
+
+    <!-- 테마 부트스트랩: 렌더 전에 .dark 클래스를 적용해 깜빡임(FOUC)을 막는다. 디폴트는 다크. -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('theme');
+          var dark = saved ? saved === 'dark' : true; // 저장값 없으면 다크가 기본
+          document.documentElement.classList.toggle('dark', dark);
+        } catch (e) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+
+    <!-- Tailwind CSS (CDN) - 사내 도구용. 프로덕션 경고는 무시해도 됩니다. -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // 메인(브랜드) 컬러: 주황 #f18f1a.
+      // 기존 코드가 indigo-* 클래스를 메인 컬러로 쓰고 있어, indigo 팔레트 자체를
+      // 주황 계열로 덮어써서 컴포넌트 수정 없이 전체 테마 색을 바꾼다. (primary = 600)
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              indigo: {
+                50:  '#fef6ec',
+                100: '#fde8cd',
+                200: '#fad09b',
+                300: '#f7b667',
+                400: '#f4a03d',
+                500: '#f59a2e',
+                600: '#f18f1a',
+                700: '#cb760f',
+                800: '#9b5b13',
+                900: '#7d4b15',
+                950: '#432708',
+              },
+            },
+          },
+        },
+      };
+    </script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet" />
+
+    <style>
+      body { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
+      .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+      .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+      /* 다크모드 스크롤바 */
+      .dark .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+      .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
+      .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+      /* 다크모드 기본 배경(부트 스크립트가 .dark를 붙인 직후 적용되어 흰 화면 깜빡임을 막는다) */
+      html.dark, html.dark body { background-color: #0f172a; }
+
+      /* 간트 '진행 중' 막대: 채워진 영역에 흐르는 사선 줄무늬로 활성 상태 강조 */
+      .gantt-progress-fill {
+        background-image: repeating-linear-gradient(
+          45deg,
+          rgba(255, 255, 255, 0.22) 0, rgba(255, 255, 255, 0.22) 7px,
+          rgba(255, 255, 255, 0) 7px, rgba(255, 255, 255, 0) 14px
+        );
+        background-size: 200% 100%;
+        animation: gantt-stripe-move 1.4s linear infinite;
+      }
+      @keyframes gantt-stripe-move { to { background-position: -28px 0; } }
+      @media (prefers-reduced-motion: reduce) { .gantt-progress-fill { animation: none; } }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>

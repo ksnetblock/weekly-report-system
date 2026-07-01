@@ -1,0 +1,279 @@
+{
+  "exported_at": "2026-06-30",
+  "projects": [
+    {
+      "gid": "1214961401786650",
+      "name": "#team-003-바이낸스페이",
+      "color": "magenta",
+      "start_on": "2026-12-31",
+      "due_on": "2026-12-31",
+      "owner": { "name": "김성현T" },
+      "members": [
+        { "name": "김성현T" },
+        { "name": "김우석" }
+      ],
+      "task_counts": {
+        "num_tasks": 9,
+        "num_completed_tasks": 3,
+        "num_incomplete_tasks": 6
+      },
+      "sections": [
+        {
+          "gid": "1214961401786651",
+          "name": "제목 없는 섹션",
+          "tasks": []
+        },
+        {
+          "gid": "1214961401786671",
+          "name": "회의록",
+          "tasks": [
+            {
+              "gid": "1215741889848715",
+              "name": "(260406) 선불 서비스 관련 미팅",
+              "completed": true,
+              "due_on": null,
+              "start_on": null,
+              "assignee": "정상헌",
+              "resource_subtype": "default_task"
+            }
+          ]
+        },
+        {
+          "gid": "1214961394821138",
+          "name": "01. 온보딩",
+          "tasks": [
+            {
+              "gid": "1215039682418261",
+              "name": "1-1. KYB",
+              "completed": false,
+              "due_on": "2026-07-31",
+              "start_on": null,
+              "assignee": "조진하",
+              "resource_subtype": "default_task"
+            }
+          ]
+        },
+        {
+          "gid": "1214961394821141",
+          "name": "02. 계약",
+          "tasks": [
+            {
+              "gid": "1215039682418267",
+              "name": "2-1. 계약서 검토",
+              "completed": false,
+              "due_on": "2026-06-26",
+              "start_on": null,
+              "assignee": "조진하",
+              "resource_subtype": "default_task"
+            },
+            {
+              "gid": "1215154350701824",
+              "name": "2-2. 사업모델 법무검토",
+              "completed": false,
+              "due_on": "2026-07-10",
+              "start_on": null,
+              "assignee": "조진하",
+              "resource_subtype": "default_task"
+            },
+            {
+              "gid": "1215154294079847",
+              "name": "2-3. 계약 체결",
+              "completed": false,
+              "due_on": "2026-07-10",
+              "start_on": null,
+              "assignee": "조진하",
+              "resource_subtype": "default_task"
+            },
+            {
+              "gid": "1215696510271521",
+              "name": "2-4. 보도자료 배포",
+              "completed": false,
+              "due_on": "2026-09-30",
+              "start_on": null,
+              "assignee": "조진하",
+              "resource_subtype": "default_task"
+            }
+          ]
+        },
+        {
+          "gid": "1214961394821144",
+          "name": "03. API 연동 개발",
+          "tasks": [
+            {
+              "gid": "1215413081313190",
+              "name": "3-1. API 문서 사업팀 내부 검토",
+              "completed": true,
+              "due_on": "2026-06-09",
+              "start_on": null,
+              "assignee": "정상헌",
+              "resource_subtype": "default_task"
+            },
+            {
+              "gid": "1215892301916545",
+              "name": "3-2. 내부 API 연동 개발",
+              "completed": false,
+              "due_on": "2026-06-26",
+              "start_on": null,
+              "assignee": "정상헌",
+              "resource_subtype": "default_task"
+            }
+          ]
+        },
+        {
+          "gid": "1215154350701841",
+          "name": "99. 기타",
+          "tasks": [
+            {
+              "gid": "1215154350701842",
+              "name": "99-1. 바이낸스 페이 도입 전반에 대한 일정, 검토 필요사항, 유관부서 등 정리",
+              "completed": true,
+              "due_on": "2026-06-09",
+              "start_on": null,
+              "assignee": "조진하",
+              "resource_subtype": "default_task"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "gid": "1214792888692023",
+      "name": "#team-002-예금토큰",
+      "color": "magenta",
+      "start_on": "2026-12-31",
+      "due_on": "2026-12-31",
+      "owner": { "name": "김성현T" },
+      "members": [
+        { "name": "김성현T" },
+        { "name": "김우석" }
+      ],
+      "task_counts": {
+        "num_tasks": 10,
+        "num_completed_tasks": 3,
+        "num_incomplete_tasks": 7
+      },
+      "sections": [
+        {
+          "gid": "1214792884881510",
+          "name": "0. KISA 과제 지원",
+          "tasks": [
+            {
+              "gid": "1214799213123048",
+              "name": "0-1. KISA 과제 지원(w. iM뱅크)",
+              "completed": true,
+              "due_on": null,
+              "start_on": null,
+              "assignee": "김성현T",
+              "resource_subtype": "default_task"
+            }
+          ]
+        },
+        {
+          "gid": "1214792884881511",
+          "name": "1. 예금토큰 시스템 개발",
+          "tasks": [
+            {
+              "gid": "1214792884881512",
+              "name": "1-1. 세부 개발 요건 협의",
+              "completed": false,
+              "due_on": null,
+              "start_on": null,
+              "assignee": "김성현T",
+              "resource_subtype": "default_task"
+            },
+            {
+              "gid": "1214792884881535",
+              "name": "1-2. 개발 범위 및 참여 인력 설정",
+              "completed": false,
+              "due_on": null,
+              "start_on": null,
+              "assignee": null,
+              "resource_subtype": "default_task"
+            },
+            {
+              "gid": "1214792884881537",
+              "name": "1-3. 본 시스템 개발",
+              "completed": false,
+              "due_on": null,
+              "start_on": null,
+              "assignee": null,
+              "resource_subtype": "default_task"
+            },
+            {
+              "gid": "1214792884881539",
+              "name": "1-4. 통합 테스트",
+              "completed": false,
+              "due_on": null,
+              "start_on": null,
+              "assignee": null,
+              "resource_subtype": "default_task"
+            }
+          ]
+        },
+        {
+          "gid": "1214792884881517",
+          "name": "2. 사업 및 영업",
+          "tasks": [
+            {
+              "gid": "1214792884881518",
+              "name": "2-1. iM뱅크 요구사항 파악",
+              "completed": false,
+              "due_on": "2026-06-30",
+              "start_on": null,
+              "assignee": "김성현T",
+              "resource_subtype": "default_task"
+            },
+            {
+              "gid": "1214792884881523",
+              "name": "2-2. 내부 설명자료 작성",
+              "completed": false,
+              "due_on": "2026-06-26",
+              "start_on": null,
+              "assignee": "김성현T",
+              "resource_subtype": "default_task"
+            },
+            {
+              "gid": "1214792884881525",
+              "name": "2-3. 타겟 가맹점 설정",
+              "completed": false,
+              "due_on": "2026-06-30",
+              "start_on": null,
+              "assignee": "김성현T",
+              "resource_subtype": "default_task"
+            }
+          ]
+        },
+        {
+          "gid": "1214792884881530",
+          "name": "3. 기타 행정 업무",
+          "tasks": [
+            {
+              "gid": "1214792884881531",
+              "name": "3-1. iM뱅크 신규 계좌 개설",
+              "completed": true,
+              "due_on": "2026-05-29",
+              "start_on": null,
+              "assignee": "조진하",
+              "resource_subtype": "default_task"
+            }
+          ]
+        },
+        {
+          "gid": "1214792884881559",
+          "name": "99. 회의록",
+          "tasks": [
+            {
+              "gid": "1214792884881560",
+              "name": "(260514) iM뱅크 김윤호 차장 예금토큰 개발 초도 미팅",
+              "completed": true,
+              "due_on": "2026-05-14",
+              "start_on": null,
+              "assignee": "김성현T",
+              "resource_subtype": "default_task"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
