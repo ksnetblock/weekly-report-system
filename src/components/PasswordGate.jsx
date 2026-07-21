@@ -46,7 +46,7 @@ export default function PasswordGate({ onUnlock, theme, onToggleTheme }) {
           <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-lg shadow-indigo-200 dark:shadow-none mb-4">
             <ShieldCheck className="w-7 h-7" />
           </div>
-          <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">주간업무 로드맵 뷰어</h1>
+          <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">업무 로드맵 뷰어</h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">접근 비밀번호를 입력하세요</p>
         </div>
 

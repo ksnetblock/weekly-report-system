@@ -17,7 +17,9 @@ export function flatten(roadmap) {
     projects.push({
       id: p.gid,
       asana_gid: p.gid,
-      name: p.name,
+      name: meta.display_name || p.name,   // 표시 이름 오버라이드 우선
+      asana_name: p.name,
+      description: meta.description || null,
       group_id: meta.group_id || null,
       color: meta.color || null,
       asana_color: p.color || null,

@@ -1,11 +1,11 @@
 -- =====================================================================
---  주간업무 로드맵 뷰어 — Supabase 스키마 v2 (Asana 동기화 + 버전 관리)
+--  업무 로드맵 뷰어 — Supabase 스키마 v2 (Asana 동기화 + 버전 관리)
 -- =====================================================================
 --  실행: Supabase 대시보드 > SQL Editor 에 전체 붙여넣고 RUN.
 --
 --  모델:
---   - Asana에서 데이터를 가져올 때마다 report_versions 에 "주간보고 1버전"이
---     스냅샷(JSON)으로 저장됩니다. (= 주간보고 파일 버전 관리)
+--   - Asana에서 데이터를 가져올 때마다 report_versions 에 새 버전 1개가
+--     스냅샷(JSON)으로 저장됩니다. (= 버전 파일 관리)
 --   - groups / project_meta 는 버전과 무관하게 유지되는 "수동 묶음 레이어".
 --     (상위 묶음 그룹, 프로젝트→그룹 배정, 색상)  → Asana gid 기준으로 연결.
 --
@@ -24,22 +24,31 @@ set search_path = public, extensions;
 create table if not exists public.groups (
   id          uuid primary key default gen_random_uuid(),
   name        text not null,
+  description text,                 -- 홈(정의·설명) 페이지용 그룹 설명
   color       text default '#6366f1',
   sort_order  int  default 0,
   created_at  timestamptz default now()
 );
+-- 기존 DB 보강
+alter table public.groups add column if not exists description text;
 
 -- 프로젝트 수동 메타 (Asana gid 기준) — 그룹 배정/색상, 버전 무관
 create table if not exists public.project_meta (
-  asana_gid   text primary key,
-  name        text,                 -- 표시용 캐시(동기화 시 갱신)
-  group_id    uuid references public.groups(id) on delete set null,
-  color       text,
-  sort_order  int default 0,
-  updated_at  timestamptz default now()
+  asana_gid    text primary key,
+  name         text,                 -- Asana 원본 이름 캐시(동기화 시 갱신)
+  display_name text,                 -- 표시용 이름 오버라이드(비면 name 사용, 동기화가 덮어쓰지 않음)
+  description  text,                 -- 홈(정의·설명) 페이지용 프로젝트 설명
+  group_id     uuid references public.groups(id) on delete set null,
+  color        text,
+  sort_order   int default 0,
+  updated_at   timestamptz default now()
 );
+-- 기존 DB 보강
+alter table public.project_meta add column if not exists display_name text;
+alter table public.project_meta add column if not exists description  text;
+alter table public.project_meta add column if not exists icon_url     text;  -- 업로드된 로고 이미지 URL(없으면 기본 문서 아이콘)
 
--- 주간보고 버전 (Asana 스냅샷)
+-- 버전 (Asana 스냅샷)
 create table if not exists public.report_versions (
   id          uuid primary key default gen_random_uuid(),
   label       text not null,        -- 예: "2026-W27" 또는 "6월 4주차"
@@ -161,13 +170,14 @@ declare v_id uuid;
 begin
   if not public.check_password(p_password) then raise exception 'invalid_password'; end if;
   if (p_group->>'id') is null or (p_group->>'id') = '' then
-    insert into public.groups (name, color, sort_order)
-    values (p_group->>'name', coalesce(p_group->>'color','#6366f1'),
+    insert into public.groups (name, description, color, sort_order)
+    values (p_group->>'name', p_group->>'description', coalesce(p_group->>'color','#6366f1'),
             coalesce((p_group->>'sort_order')::int, 0))
     returning id into v_id;
   else
     update public.groups set
       name = coalesce(p_group->>'name', name),
+      description = case when p_group ? 'description' then p_group->>'description' else description end,
       color = coalesce(p_group->>'color', color),
       sort_order = coalesce((p_group->>'sort_order')::int, sort_order)
     where id = (p_group->>'id')::uuid
@@ -197,22 +207,30 @@ returns void language plpgsql security definer set search_path = public, extensi
 as $$
 begin
   if not public.check_password(p_password) then raise exception 'invalid_password'; end if;
-  insert into public.project_meta (asana_gid, group_id, color, sort_order, start_on, due_on)
+  insert into public.project_meta (asana_gid, name, display_name, description, group_id, color, sort_order, start_on, due_on, icon_url)
   values (
     p_gid,
+    p_patch->>'name',
+    nullif(p_patch->>'display_name',''),
+    p_patch->>'description',
     nullif(p_patch->>'group_id','')::uuid,
     p_patch->>'color',
     coalesce((p_patch->>'sort_order')::int, 0),
     nullif(p_patch->>'start_on','')::date,
-    nullif(p_patch->>'due_on','')::date
+    nullif(p_patch->>'due_on','')::date,
+    nullif(p_patch->>'icon_url','')
   )
   on conflict (asana_gid) do update set
-    group_id   = case when p_patch ? 'group_id'  then nullif(p_patch->>'group_id','')::uuid   else public.project_meta.group_id   end,
-    color      = case when p_patch ? 'color'      then p_patch->>'color'                       else public.project_meta.color      end,
-    sort_order = case when p_patch ? 'sort_order' then (p_patch->>'sort_order')::int           else public.project_meta.sort_order end,
-    start_on   = case when p_patch ? 'start_on'  then nullif(p_patch->>'start_on','')::date   else public.project_meta.start_on   end,
-    due_on     = case when p_patch ? 'due_on'    then nullif(p_patch->>'due_on','')::date     else public.project_meta.due_on     end,
-    updated_at = now();
+    name         = case when p_patch ? 'name'         then p_patch->>'name'                        else public.project_meta.name         end,
+    display_name = case when p_patch ? 'display_name' then nullif(p_patch->>'display_name','')      else public.project_meta.display_name end,
+    description  = case when p_patch ? 'description'  then p_patch->>'description'                  else public.project_meta.description  end,
+    group_id     = case when p_patch ? 'group_id'     then nullif(p_patch->>'group_id','')::uuid    else public.project_meta.group_id     end,
+    color        = case when p_patch ? 'color'        then p_patch->>'color'                        else public.project_meta.color        end,
+    sort_order   = case when p_patch ? 'sort_order'   then (p_patch->>'sort_order')::int            else public.project_meta.sort_order   end,
+    start_on     = case when p_patch ? 'start_on'    then nullif(p_patch->>'start_on','')::date    else public.project_meta.start_on     end,
+    due_on       = case when p_patch ? 'due_on'      then nullif(p_patch->>'due_on','')::date      else public.project_meta.due_on       end,
+    icon_url     = case when p_patch ? 'icon_url'    then nullif(p_patch->>'icon_url','')          else public.project_meta.icon_url     end,
+    updated_at   = now();
 end;
 $$;
 
@@ -245,6 +263,13 @@ begin
     updated_at = now();
 end;
 $$;
+
+-- ── 8c. 프로젝트 아이콘 Storage 버킷 ──────────────────────────────────
+-- 업로드/삭제는 project-icon Edge Function이 service role 키로 수행(RLS 우회) → 별도 storage 정책 불필요.
+-- public 버킷이므로 읽기는 anon 키/비로그인 상태에서도 공개 URL로 가능.
+insert into storage.buckets (id, name, public)
+values ('project-icons', 'project-icons', true)
+on conflict (id) do update set public = true;
 
 -- ── 5. get_roadmap 재정의 (section_meta 포함) ────────────────────────
 create or replace function public.get_roadmap(p_password text, p_version_id uuid default null)

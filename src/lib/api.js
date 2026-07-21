@@ -36,6 +36,12 @@ export async function deleteVersion(id) {
   return unwrap(await supabase.rpc('delete_version', { p_password: getPassword(), p_id: id }))
 }
 
+// 수동 레이어(그룹 + 프로젝트 메타)만 필요할 때 (홈/그룹 관리 페이지). 버전과 무관하게 항상 반환됨.
+export async function getManualLayer() {
+  const d = await getRoadmap(null)
+  return { groups: d?.groups || [], projectMeta: d?.project_meta || [] }
+}
+
 // Asana 프로젝트 목록만 가져오기 (선택 UI용)
 export async function listAsanaProjects() {
   const { data, error } = await supabase.functions.invoke('asana-sync', {
@@ -90,4 +96,41 @@ export async function setProjectMeta(gid, patch) {
 // 섹션 수동 메타(날짜 오버라이드) — Asana gid 기준
 export async function setSectionMeta(gid, patch) {
   return unwrap(await supabase.rpc('set_section_meta', { p_password: getPassword(), p_gid: gid, p_patch: patch }))
+}
+
+// 파일 → base64 (데이터 URL의 콤마 이후 부분만)
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
+    reader.onerror = () => reject(new Error('파일을 읽지 못했습니다.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function invokeProjectIcon(body) {
+  const { data, error } = await supabase.functions.invoke('project-icon', { body })
+  if (error) {
+    let msg = error.message || '아이콘 처리에 실패했습니다.'
+    try { const ctx = await error.context?.json?.(); if (ctx?.error) msg = ctx.error } catch { /* noop */ }
+    if (msg.includes('invalid_password')) { const e = new Error('비밀번호가 올바르지 않습니다.'); e.code = 'invalid_password'; throw e }
+    throw new Error(msg)
+  }
+  if (data?.error) throw new Error(data.error)
+  return data
+}
+
+// 프로젝트 로고 이미지 업로드 (Edge Function 경유 — 비밀번호 검증 후 Storage에 저장, icon_url까지 반영)
+export async function uploadProjectIcon(gid, file) {
+  const data = await fileToBase64(file)
+  const res = await invokeProjectIcon({
+    password: getPassword(), action: 'upload', gid,
+    filename: file.name, content_type: file.type, data,
+  })
+  return res.icon_url // 저장된 공개 URL
+}
+
+// 프로젝트 로고 이미지 삭제 (기본 문서 아이콘으로 복귀)
+export async function deleteProjectIcon(gid) {
+  await invokeProjectIcon({ password: getPassword(), action: 'delete', gid })
 }
