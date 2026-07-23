@@ -6,6 +6,7 @@ import PasswordGate from './components/PasswordGate.jsx'
 import Header from './components/Header.jsx'
 import HomePage from './pages/HomePage.jsx'
 import SchedulePage from './pages/SchedulePage.jsx'
+import WeeklyPage from './pages/WeeklyPage.jsx'
 import GroupsPage from './pages/GroupsPage.jsx'
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage onAuthError={onAuthError} />} />
         <Route path="/schedule" element={<SchedulePage onAuthError={onAuthError} />} />
+        <Route path="/weekly" element={<WeeklyPage onAuthError={onAuthError} />} />
         <Route path="/groups" element={<GroupsPage onAuthError={onAuthError} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

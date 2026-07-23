@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Trello, Home, CalendarRange, FolderTree, LogOut, Sun, Moon } from 'lucide-react'
+import { Trello, Home, CalendarRange, FileText, FolderTree, LogOut, Sun, Moon } from 'lucide-react'
 
 // 모든 페이지 공통 헤더 — 로고 + 페이지 네비게이션 + 테마/잠금
 export default function Header({ theme, onToggleTheme, onLogout }) {
@@ -9,7 +9,7 @@ export default function Header({ theme, onToggleTheme, onLogout }) {
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-600 rounded-lg text-white"><Trello className="w-6 h-6" /></div>
           <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">업무 로드맵 뷰어</h1>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">블록체인 로드맵</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">Asana 동기화 · 버전 관리</p>
           </div>
         </div>
@@ -18,6 +18,7 @@ export default function Header({ theme, onToggleTheme, onLogout }) {
           <nav className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700/60 p-1 rounded-lg">
             <NavItem to="/" end Icon={Home} label="홈" />
             <NavItem to="/schedule" Icon={CalendarRange} label="일정" />
+            <NavItem to="/weekly" Icon={FileText} label="주간보고" />
             <NavItem to="/groups" Icon={FolderTree} label="그룹 관리" />
           </nav>
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />

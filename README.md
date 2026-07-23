@@ -1,4 +1,4 @@
-# 업무 로드맵 뷰어
+# 블록체인 로드맵
 
 **Asana API**에서 데이터를 가져와 **Supabase**에 *버전(스냅샷)*으로 저장하고,
 비밀번호로 보호되는 간트차트로 보여주는 **순수 React(Vite)** 앱입니다.
@@ -58,13 +58,15 @@ supabase secrets set ASANA_PROJECT_GIDS=1214961401786650,1214792888692023
 # 함수 배포
 supabase functions deploy asana-sync
 supabase functions deploy project-icon
+supabase functions deploy project-gallery
 ```
 
 > Asana PAT 발급: Asana → My Settings → Apps → **Personal access tokens**.
 > `ASANA_PROJECT_GIDS`를 비우면 워크스페이스의 프로젝트 목록(typeahead, 최대 100개)을 사용합니다.
-> `project-icon` 함수는 그룹 관리 페이지의 프로젝트 로고 이미지 업로드용입니다.
-> 별도 secret 등록 없이 Supabase가 자동 주입하는 `SUPABASE_SERVICE_ROLE_KEY`로 동작하며,
-> `supabase/schema.sql`을 실행하면 `project-icons` Storage 버킷(public)이 함께 생성됩니다.
+> `project-icon` 함수는 그룹 관리 페이지의 프로젝트 로고 이미지 업로드용, `project-gallery` 함수는
+> 프로젝트 이해를 돕는 참고 이미지(여러 장) 업로드/삭제용입니다.
+> 둘 다 별도 secret 등록 없이 Supabase가 자동 주입하는 `SUPABASE_SERVICE_ROLE_KEY`로 동작하며,
+> `supabase/schema.sql`을 실행하면 `project-icons` / `project-gallery` Storage 버킷(public)이 함께 생성됩니다.
 
 ## 3. React 환경변수(.env)
 
@@ -95,6 +97,8 @@ npm run build    # 정적 배포용 dist/
    조회된 Asana 프로젝트를 그룹에 배정하고, 프로젝트 **이름·설명**을 편집.
    프로젝트 앞 아이콘을 클릭하면 **로고 이미지**를 업로드할 수 있고(미업로드 시 기본 문서 아이콘),
    업로드된 아이콘에 마우스를 올리면 나오는 ✕ 버튼으로 기본 아이콘으로 되돌릴 수 있습니다.
+   각 프로젝트 행의 이미지 아이콘 버튼을 누르면 **참고 이미지 갤러리**가 열려 여러 장을 업로드/삭제하고,
+   썸네일을 클릭하면 확대해서 볼 수 있습니다. 홈에서는 같은 갤러리를 보기 전용으로 확인할 수 있습니다.
 3. **홈(`/`)** 에서 그룹과 프로젝트의 정의·설명을 한눈에 확인
 4. **일정(`/schedule`)** → **Asana 가져오기** 로 현재 Asana 상태를 새 버전으로 저장,
    버전 드롭다운으로 과거 버전 조회, 필터·간트로 일정 확인
@@ -126,11 +130,12 @@ npm run build    # 정적 배포용 dist/
 │  ├─ schema.sql                  # 테이블/RLS/RPC/비밀번호/Storage 버킷  ← 먼저 실행
 │  └─ functions/
 │     ├─ asana-sync/              # Asana 연동 Edge Function
-│     └─ project-icon/            # 프로젝트 로고 이미지 업로드/삭제 Edge Function
+│     ├─ project-icon/            # 프로젝트 로고 이미지 업로드/삭제 Edge Function
+│     └─ project-gallery/         # 프로젝트 참고 이미지(여러 장) 업로드/삭제 Edge Function
 ├─ src/
 │  ├─ App.jsx                     # 라우터 셸 + 인증 게이트
 │  ├─ pages/  HomePage(정의·설명) · SchedulePage(간트) · GroupsPage(그룹·배정 관리)
 │  ├─ lib/  supabase·auth·api·transform·helpers
-│  └─ components/  Header(네비게이션) · Gantt · ProjectModal · SectionModal · SyncModal · Modal · PasswordGate · Toast
+│  └─ components/  Header(네비게이션) · Gantt · ProjectModal · SectionModal · SyncModal · Modal · GalleryModal · PasswordGate · Toast
 └─ reference/asana_openapi.json   # 사용한 Asana 엔드포인트 명세
 ```

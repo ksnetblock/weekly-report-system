@@ -1,5 +1,5 @@
 -- =====================================================================
---  업무 로드맵 뷰어 — Supabase 스키마 v2 (Asana 동기화 + 버전 관리)
+--  블록체인 로드맵 — Supabase 스키마 v2 (Asana 동기화 + 버전 관리)
 -- =====================================================================
 --  실행: Supabase 대시보드 > SQL Editor 에 전체 붙여넣고 RUN.
 --
@@ -271,6 +271,48 @@ insert into storage.buckets (id, name, public)
 values ('project-icons', 'project-icons', true)
 on conflict (id) do update set public = true;
 
+-- ── 8d. 프로젝트 참고 이미지 갤러리 (프로젝트 이해를 돕는 이미지 여러 장) ─
+create table if not exists public.project_images (
+  id         uuid primary key default gen_random_uuid(),
+  asana_gid  text not null references public.project_meta(asana_gid) on delete cascade,
+  url        text not null,
+  path       text not null,   -- storage 삭제용 오브젝트 경로
+  caption    text,
+  sort_order int default 0,
+  created_at timestamptz default now()
+);
+alter table public.project_images enable row level security;
+create index if not exists project_images_gid_idx on public.project_images (asana_gid, sort_order);
+
+create or replace function public.add_project_image(
+  p_password text, p_gid text, p_url text, p_path text, p_caption text default null
+) returns json language plpgsql security definer set search_path = public, extensions
+as $$
+declare v_id uuid; v_sort int;
+begin
+  if not public.check_password(p_password) then raise exception 'invalid_password'; end if;
+  select coalesce(max(sort_order), -1) + 1 into v_sort from public.project_images where asana_gid = p_gid;
+  insert into public.project_images (asana_gid, url, path, caption, sort_order)
+  values (p_gid, p_url, p_path, nullif(p_caption, ''), v_sort)
+  returning id into v_id;
+  return json_build_object('id', v_id);
+end;
+$$;
+
+create or replace function public.delete_project_image(p_password text, p_id uuid)
+returns void language plpgsql security definer set search_path = public, extensions
+as $$
+begin
+  if not public.check_password(p_password) then raise exception 'invalid_password'; end if;
+  delete from public.project_images where id = p_id;
+end;
+$$;
+
+-- 참고 이미지 Storage 버킷 (project-icon과 동일하게 Edge Function이 service role로 기록)
+insert into storage.buckets (id, name, public)
+values ('project-gallery', 'project-gallery', true)
+on conflict (id) do update set public = true;
+
 -- ── 5. get_roadmap 재정의 (section_meta 포함) ────────────────────────
 create or replace function public.get_roadmap(p_password text, p_version_id uuid default null)
 returns json language plpgsql security definer set search_path = public, extensions
@@ -290,9 +332,10 @@ begin
       json_build_object('id', v.id, 'label', v.label, 'note', v.note,
                         'summary', v.summary, 'created_at', v.created_at) end,
     'payload',      coalesce(v.payload, json_build_object('projects', '[]'::json)::jsonb),
-    'groups',       (select coalesce(json_agg(g order by g.sort_order, g.created_at), '[]'::json) from public.groups g),
-    'project_meta', (select coalesce(json_agg(m), '[]'::json) from public.project_meta m),
-    'section_meta', (select coalesce(json_agg(sm), '[]'::json) from public.section_meta sm)
+    'groups',        (select coalesce(json_agg(g order by g.sort_order, g.created_at), '[]'::json) from public.groups g),
+    'project_meta',  (select coalesce(json_agg(m), '[]'::json) from public.project_meta m),
+    'section_meta',  (select coalesce(json_agg(sm), '[]'::json) from public.section_meta sm),
+    'project_images', (select coalesce(json_agg(pi order by pi.asana_gid, pi.sort_order, pi.created_at), '[]'::json) from public.project_images pi)
   );
 end;
 $$;
@@ -307,7 +350,152 @@ grant execute on function public.upsert_group(text, jsonb)                      
 grant execute on function public.delete_group(text, uuid)                       to anon, authenticated;
 grant execute on function public.set_project_meta(text, text, jsonb)            to anon, authenticated;
 grant execute on function public.set_section_meta(text, text, jsonb)            to anon, authenticated;
+grant execute on function public.add_project_image(text, text, text, text, text) to anon, authenticated;
+grant execute on function public.delete_project_image(text, uuid)              to anon, authenticated;
 revoke execute on function public.check_password(text) from anon, authenticated;
+
+-- ── 11. 주간보고 (Asana 변화 기반 편집 · 버전 관리) ──────────────────
+--  각 행 = 저장된 주간보고 1건(버전). content 에 편집기 구조를 JSON 으로 보관.
+--  DOCX 파일 자체는 저장하지 않고 내용만 저장한다.
+create table if not exists public.weekly_reports (
+  id           uuid primary key default gen_random_uuid(),
+  title        text not null,          -- 예: "2026-W30 주간보고"
+  report_date  date,                   -- 보고일(하루 기준)
+  content      jsonb not null,         -- { sections:[{project_gid,project_name,items:[{status,text}]}], footer }
+  note         text,
+  created_at   timestamptz default now(),
+  updated_at   timestamptz default now()
+);
+alter table public.weekly_reports enable row level security;
+create index if not exists weekly_reports_created_idx on public.weekly_reports (created_at desc);
+
+-- 기존 설치 마이그레이션: period_start/period_end(기간) → report_date(단일 보고일)
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'weekly_reports' and column_name = 'period_start'
+  ) then
+    alter table public.weekly_reports add column if not exists report_date date;
+    update public.weekly_reports set report_date = coalesce(report_date, period_start, period_end);
+    alter table public.weekly_reports drop column period_start;
+    alter table public.weekly_reports drop column if exists period_end;
+  end if;
+end $$;
+
+-- 목록 (가벼움, content 제외)
+create or replace function public.list_weekly_reports(p_password text)
+returns json language plpgsql security definer set search_path = public, extensions
+as $$
+begin
+  if not public.check_password(p_password) then raise exception 'invalid_password'; end if;
+  return (
+    select coalesce(json_agg(json_build_object(
+      'id', w.id, 'title', w.title,
+      'report_date', w.report_date,
+      'note', w.note, 'updated_at', w.updated_at, 'created_at', w.created_at
+    ) order by w.created_at desc), '[]'::json)
+    from public.weekly_reports w
+  );
+end;
+$$;
+
+-- 단일 보고서 전체
+create or replace function public.get_weekly_report(p_password text, p_id uuid)
+returns json language plpgsql security definer set search_path = public, extensions
+as $$
+declare w public.weekly_reports%rowtype;
+begin
+  if not public.check_password(p_password) then raise exception 'invalid_password'; end if;
+  select * into w from public.weekly_reports where id = p_id;
+  if w.id is null then return null; end if;
+  return json_build_object(
+    'id', w.id, 'title', w.title,
+    'report_date', w.report_date,
+    'content', w.content, 'note', w.note,
+    'updated_at', w.updated_at, 'created_at', w.created_at
+  );
+end;
+$$;
+
+-- 저장 (id 있으면 갱신, 없으면 신규) — { id } 반환
+create or replace function public.upsert_weekly_report(p_password text, p_report jsonb)
+returns json language plpgsql security definer set search_path = public, extensions
+as $$
+declare v_id uuid;
+begin
+  if not public.check_password(p_password) then raise exception 'invalid_password'; end if;
+  if (p_report->>'id') is null or (p_report->>'id') = '' then
+    insert into public.weekly_reports (title, report_date, content, note)
+    values (
+      coalesce(nullif(p_report->>'title',''), to_char(now(), 'YYYY-MM-DD') || ' 주간보고'),
+      nullif(p_report->>'report_date','')::date,
+      coalesce(p_report->'content', '{}'::jsonb),
+      p_report->>'note'
+    )
+    returning id into v_id;
+  else
+    update public.weekly_reports set
+      title        = coalesce(nullif(p_report->>'title',''), title),
+      report_date  = nullif(p_report->>'report_date','')::date,
+      content      = coalesce(p_report->'content', content),
+      note         = case when p_report ? 'note' then p_report->>'note' else note end,
+      updated_at   = now()
+    where id = (p_report->>'id')::uuid
+    returning id into v_id;
+  end if;
+  return json_build_object('id', v_id);
+end;
+$$;
+
+create or replace function public.delete_weekly_report(p_password text, p_id uuid)
+returns void language plpgsql security definer set search_path = public, extensions
+as $$
+begin
+  if not public.check_password(p_password) then raise exception 'invalid_password'; end if;
+  delete from public.weekly_reports where id = p_id;
+end;
+$$;
+
+grant execute on function public.list_weekly_reports(text)          to anon, authenticated;
+grant execute on function public.get_weekly_report(text, uuid)      to anon, authenticated;
+grant execute on function public.upsert_weekly_report(text, jsonb)  to anon, authenticated;
+grant execute on function public.delete_weekly_report(text, uuid)   to anon, authenticated;
+
+-- ── 12. AI 초안 설정 (팀 공유 · 단일 행) ─────────────────────────────
+--  주간보고 AI 초안 생성에 쓰는 모델/시스템 프롬프트/예시 양식을 팀 전체가 공유.
+--  브라우저 localStorage가 아니라 DB에 보관 → 누가 수정하든 모두에게 반영.
+create table if not exists public.ai_settings (
+  id         int primary key default 1,
+  settings   jsonb not null default '{}'::jsonb,  -- { model, systemPrompt, fewShot }
+  updated_at timestamptz default now(),
+  constraint ai_settings_single_row check (id = 1)
+);
+alter table public.ai_settings enable row level security;
+
+create or replace function public.get_ai_settings(p_password text)
+returns json language plpgsql security definer set search_path = public, extensions
+as $$
+declare v_settings jsonb;
+begin
+  if not public.check_password(p_password) then raise exception 'invalid_password'; end if;
+  select settings into v_settings from public.ai_settings where id = 1;
+  return coalesce(v_settings, '{}'::jsonb);
+end;
+$$;
+
+create or replace function public.set_ai_settings(p_password text, p_settings jsonb)
+returns void language plpgsql security definer set search_path = public, extensions
+as $$
+begin
+  if not public.check_password(p_password) then raise exception 'invalid_password'; end if;
+  insert into public.ai_settings (id, settings) values (1, coalesce(p_settings, '{}'::jsonb))
+  on conflict (id) do update set settings = excluded.settings, updated_at = now();
+end;
+$$;
+
+grant execute on function public.get_ai_settings(text)         to anon, authenticated;
+grant execute on function public.set_ai_settings(text, jsonb)  to anon, authenticated;
 
 -- =====================================================================
 --  ★★★ 10. 접근 비밀번호 설정 (여기서 비밀번호를 정합니다) ★★★

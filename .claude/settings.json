@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx supabase *)",
+      "Bash(rm -f /tmp/check.sql)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
+    ]
+  }
+}

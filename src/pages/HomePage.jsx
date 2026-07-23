@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Loader2, FolderTree, Layers, Settings2, FileText } from 'lucide-react'
+import { Loader2, FolderTree, Layers, Settings2, FileText, Images } from 'lucide-react'
 import * as api from '../lib/api.js'
 import { useToast } from '../components/Toast.jsx'
+import GalleryModal from '../components/GalleryModal.jsx'
 
 // 홈 — 그룹과 각 그룹에 속한 프로젝트의 정의·상세 설명 (읽기 전용)
 export default function HomePage({ onAuthError }) {
@@ -10,13 +11,16 @@ export default function HomePage({ onAuthError }) {
   const [loading, setLoading] = useState(true)
   const [groups, setGroups] = useState([])
   const [projectMeta, setProjectMeta] = useState([])
+  const [projectImages, setProjectImages] = useState([])
+  const [galleryGid, setGalleryGid] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const { groups, projectMeta } = await api.getManualLayer()
+      const { groups, projectMeta, projectImages } = await api.getManualLayer()
       setGroups(groups)
       setProjectMeta(projectMeta)
+      setProjectImages(projectImages)
     } catch (e) {
       onAuthError(e)
       toast('불러오기 실패', e.message, 'warning')
@@ -35,6 +39,21 @@ export default function HomePage({ onAuthError }) {
     }
     return map
   }, [groups, projectMeta])
+
+  // asana_gid → 참고 이미지 목록
+  const imagesByGid = useMemo(() => {
+    const map = new Map()
+    for (const img of projectImages) {
+      if (!map.has(img.asana_gid)) map.set(img.asana_gid, [])
+      map.get(img.asana_gid).push(img)
+    }
+    return map
+  }, [projectImages])
+
+  const galleryProject = useMemo(
+    () => projectMeta.find((p) => p.asana_gid === galleryGid) || null,
+    [projectMeta, galleryGid]
+  )
 
   const assignedCount = useMemo(
     () => projectMeta.filter((p) => p.group_id).length,
@@ -107,27 +126,45 @@ export default function HomePage({ onAuthError }) {
                   {projects.length === 0 ? (
                     <p className="px-6 py-5 text-sm text-slate-400 dark:text-slate-500">배정된 프로젝트가 없습니다.</p>
                   ) : (
-                    projects.map((p) => (
-                      <div key={p.asana_gid} className="px-6 py-4 flex items-start gap-3">
-                        <div className="mt-0.5 w-7 h-7 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                          {p.icon_url
-                            ? <img src={p.icon_url} alt="" className="w-full h-full object-cover" />
-                            : <FileText className="w-4 h-4" />}
+                    projects.map((p) => {
+                      const imgs = imagesByGid.get(p.asana_gid) || []
+                      return (
+                        <div key={p.asana_gid} className="px-6 py-4 flex items-start gap-3">
+                          <div className="mt-0.5 w-7 h-7 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                            {p.icon_url
+                              ? <img src={p.icon_url} alt="" className="w-full h-full object-cover" />
+                              : <FileText className="w-4 h-4" />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{displayName(p)}</p>
+                            {p.description
+                              ? <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed whitespace-pre-wrap">{p.description}</p>
+                              : <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 italic">설명이 없습니다.</p>}
+                          </div>
+                          {imgs.length > 0 && (
+                            <button onClick={() => setGalleryGid(p.asana_gid)} title="참고 이미지 보기"
+                              className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 mt-0.5 bg-slate-100 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md text-xs font-semibold">
+                              <Images className="w-3.5 h-3.5" /> {imgs.length}
+                            </button>
+                          )}
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{displayName(p)}</p>
-                          {p.description
-                            ? <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed whitespace-pre-wrap">{p.description}</p>
-                            : <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 italic">설명이 없습니다.</p>}
-                        </div>
-                      </div>
-                    ))
+                      )
+                    })
                   )}
                 </div>
               </section>
             )
           })}
         </div>
+      )}
+
+      {galleryGid && (
+        <GalleryModal
+          title={`${galleryProject?.display_name || galleryProject?.name || '프로젝트'} — 참고 이미지`}
+          images={imagesByGid.get(galleryGid) || []}
+          initialIndex={0}
+          onClose={() => setGalleryGid(null)}
+        />
       )}
     </main>
   )

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>업무 로드맵 뷰어</title>
+    <title>블록체인 로드맵</title>
 
     <!-- 테마 부트스트랩: 렌더 전에 .dark 클래스를 적용해 깜빡임(FOUC)을 막는다. 디폴트는 다크. -->
     <script>
@@ -80,6 +80,30 @@
       }
       @keyframes gantt-stripe-move { to { background-position: -28px 0; } }
       @media (prefers-reduced-motion: reduce) { .gantt-progress-fill { animation: none; } }
+
+      /* Tiptap 리치텍스트 에디터 콘텐츠 서식 (Tailwind Preflight가 지운 기본 스타일 복원) */
+      .rich-content { outline: none; line-height: 1.6; }
+      .rich-content h1 { font-size: 1.5rem; font-weight: 700; margin: .6em 0 .3em; }
+      .rich-content h2 { font-size: 1.25rem; font-weight: 700; margin: 1.2em 0 .35em; }
+      .rich-content h3 { font-size: 1.1rem; font-weight: 600; margin: .8em 0 .25em; }
+      .rich-content h2:first-child, .rich-content h3:first-child { margin-top: .2em; }
+      .rich-content p { margin: .35em 0; }
+      .rich-content ul { list-style: disc; padding-left: 1.4em; margin: .35em 0; }
+      .rich-content ol { list-style: decimal; padding-left: 1.4em; margin: .35em 0; }
+      .rich-content li { margin: .12em 0; }
+      .rich-content li > ul, .rich-content li > ol { margin: .1em 0; }
+      .rich-content blockquote { border-left: 3px solid #cbd5e1; padding-left: .8em; color: #64748b; margin: .5em 0; }
+      .rich-content strong { font-weight: 700; }
+      .rich-content em { font-style: italic; }
+      .rich-content s { text-decoration: line-through; }
+      .rich-content code { background: #f1f5f9; padding: .1em .3em; border-radius: 4px; font-size: .9em; }
+      .dark .rich-content blockquote { border-left-color: #475569; color: #94a3b8; }
+      .dark .rich-content code { background: #334155; }
+      /* Placeholder(빈 에디터 안내문) */
+      .rich-content p.is-editor-empty:first-child::before {
+        content: attr(data-placeholder);
+        color: #94a3b8; float: left; height: 0; pointer-events: none;
+      }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100">

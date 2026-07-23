@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Loader2, Plus, Edit3, Trash2, FolderTree, FolderPlus, X, Check,
-  FileText, Search, CircleAlert,
+  FileText, Search, CircleAlert, Images,
 } from 'lucide-react'
 import * as api from '../lib/api.js'
 import { asanaColorToHex } from '../lib/helpers.js'
 import { useToast } from '../components/Toast.jsx'
 import Modal, { ColorPicker, PALETTE } from '../components/Modal.jsx'
+import GalleryModal from '../components/GalleryModal.jsx'
 
 // 그룹 관리 — 그룹 정의(이름·색·설명) 편집 + Asana 프로젝트 조회/배정 + 이름·설명 관리
 export default function GroupsPage({ onAuthError }) {
@@ -14,16 +15,19 @@ export default function GroupsPage({ onAuthError }) {
   const [loading, setLoading] = useState(true)
   const [groups, setGroups] = useState([])
   const [projectMeta, setProjectMeta] = useState([])
+  const [projectImages, setProjectImages] = useState([])
 
   const [groupForm, setGroupForm] = useState(null)   // 'new' | group | null
   const [assignTo, setAssignTo] = useState(null)     // 배정 대상 그룹
+  const [galleryGid, setGalleryGid] = useState(null) // 참고 이미지 갤러리를 연 프로젝트의 asana_gid
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const { groups, projectMeta } = await api.getManualLayer()
+      const { groups, projectMeta, projectImages } = await api.getManualLayer()
       setGroups(groups)
       setProjectMeta(projectMeta)
+      setProjectImages(projectImages)
     } catch (e) {
       onAuthError(e)
       toast('불러오기 실패', e.message, 'warning')
@@ -55,6 +59,8 @@ export default function GroupsPage({ onAuthError }) {
   const saveProjectMeta = (gid, patch) => guard(() => api.setProjectMeta(gid, patch), '프로젝트가 저장되었습니다.')
   const uploadProjectIcon = (gid, file) => guard(() => api.uploadProjectIcon(gid, file), '아이콘이 업로드되었습니다.')
   const deleteProjectIcon = (gid) => guard(() => api.deleteProjectIcon(gid), '기본 아이콘으로 되돌렸습니다.')
+  const uploadProjectImage = (gid, file) => guard(() => api.uploadProjectImage(gid, file))
+  const deleteProjectImage = (imageId) => guard(() => api.deleteProjectImage(imageId))
 
   const projectsByGroup = useMemo(() => {
     const map = new Map(groups.map((g) => [g.id, []]))
@@ -63,6 +69,21 @@ export default function GroupsPage({ onAuthError }) {
     }
     return map
   }, [groups, projectMeta])
+
+  // asana_gid → 참고 이미지 목록
+  const imagesByGid = useMemo(() => {
+    const map = new Map()
+    for (const img of projectImages) {
+      if (!map.has(img.asana_gid)) map.set(img.asana_gid, [])
+      map.get(img.asana_gid).push(img)
+    }
+    return map
+  }, [projectImages])
+
+  const galleryProject = useMemo(
+    () => projectMeta.find((p) => p.asana_gid === galleryGid) || null,
+    [projectMeta, galleryGid]
+  )
 
   // asana_gid → 소속 그룹명 (배정 모달에서 '다른 그룹에 배정됨' 표시용)
   const groupNameByGid = useMemo(() => {
@@ -115,6 +136,8 @@ export default function GroupsPage({ onAuthError }) {
               onSaveProject={saveProjectMeta}
               onUploadIcon={uploadProjectIcon}
               onDeleteIcon={deleteProjectIcon}
+              imagesByGid={imagesByGid}
+              onOpenGallery={setGalleryGid}
             />
           ))}
         </div>
@@ -137,12 +160,23 @@ export default function GroupsPage({ onAuthError }) {
           onAuthError={onAuthError}
         />
       )}
+
+      {galleryGid && (
+        <GalleryModal
+          title={`${galleryProject?.display_name || galleryProject?.name || '프로젝트'} — 참고 이미지`}
+          images={imagesByGid.get(galleryGid) || []}
+          editable
+          onUpload={(file) => uploadProjectImage(galleryGid, file)}
+          onDelete={(imageId) => deleteProjectImage(imageId)}
+          onClose={() => setGalleryGid(null)}
+        />
+      )}
     </main>
   )
 }
 
 // ── 그룹 카드 ────────────────────────────────────────────────────────
-function GroupCard({ group, projects, onEdit, onDelete, onAssign, onUnassign, onSaveProject, onUploadIcon, onDeleteIcon }) {
+function GroupCard({ group, projects, onEdit, onDelete, onAssign, onUnassign, onSaveProject, onUploadIcon, onDeleteIcon, imagesByGid, onOpenGallery }) {
   return (
     <section className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700 flex items-start justify-between gap-3"
@@ -173,7 +207,8 @@ function GroupCard({ group, projects, onEdit, onDelete, onAssign, onUnassign, on
         ) : (
           projects.map((p) => (
             <ProjectRow key={p.asana_gid} project={p} onUnassign={() => onUnassign(p.asana_gid)} onSave={onSaveProject}
-              onUploadIcon={onUploadIcon} onDeleteIcon={onDeleteIcon} />
+              onUploadIcon={onUploadIcon} onDeleteIcon={onDeleteIcon}
+              images={imagesByGid.get(p.asana_gid) || []} onOpenGallery={() => onOpenGallery(p.asana_gid)} />
           ))
         )}
       </div>
@@ -189,7 +224,7 @@ function GroupCard({ group, projects, onEdit, onDelete, onAssign, onUnassign, on
 }
 
 // ── 프로젝트 행 (이름·설명 인라인 편집) ──────────────────────────────
-function ProjectRow({ project, onUnassign, onSave, onUploadIcon, onDeleteIcon }) {
+function ProjectRow({ project, onUnassign, onSave, onUploadIcon, onDeleteIcon, images, onOpenGallery }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(project.display_name || project.name || '')
   const [desc, setDesc] = useState(project.description || '')
@@ -283,6 +318,15 @@ function ProjectRow({ project, onUnassign, onSave, onUploadIcon, onDeleteIcon })
         <p className="text-[10px] text-slate-300 dark:text-slate-600 mt-1 font-mono">id: {project.asana_gid}</p>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
+        <button onClick={onOpenGallery} title="참고 이미지"
+          className="relative p-1.5 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/30">
+          <Images className="w-4 h-4" />
+          {images.length > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+              {images.length}
+            </span>
+          )}
+        </button>
         <button onClick={start} title="이름·설명 편집"
           className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700"><Edit3 className="w-4 h-4" /></button>
         <button onClick={onUnassign} title="이 그룹에서 배정 해제"
