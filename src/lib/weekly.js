@@ -230,11 +230,32 @@ KISA 과제(PG 모델)
 // 체크된 태스크(+활동내역) → Claude에 넘길 사람이 읽기 쉬운 텍스트
 //   grouped: groupChanges() 결과, checkedSet: 체크된 task gid Set
 //   activityByGid: { [gid]: { items: [{ subtype, text, author, created_at }] } }
+//   하위태스크는 부모 아래 한 단계 들여써서, 부모가 체크되지 않았어도 소속을 알 수 있게 한다.
 export function buildCheckedTasksText(grouped, checkedSet, activityByGid = {}) {
   const lines = []
+
+  // 한 태스크(부모 또는 하위) → "- 태스크: 이름 (메타)" + 활동내역 줄들
+  const emitTask = (t, indent, label) => {
+    const meta = []
+    if (t.assignee) meta.push(`담당 ${t.assignee}`)
+    meta.push(t.changeType === 'completed' ? '완료됨' : '수정됨')
+    if (t.status) meta.push(`상태 ${t.status}`)
+    if (t.section_name) meta.push(`섹션 ${t.section_name}`)
+    lines.push(`${indent}- ${label}: ${t.name} (${meta.join(', ')})`)
+    for (const a of activityByGid[t.gid]?.items || []) {
+      if (a?.text) lines.push(`${indent}    · ${a.text}`)
+    }
+  }
+
   for (const g of grouped || []) {
+    // 부모 또는 하위태스크 중 하나라도 체크된 태스크만 남긴다
     const projs = (g.projects || [])
-      .map((p) => ({ ...p, tasks: (p.tasks || []).filter((t) => checkedSet.has(t.gid)) }))
+      .map((p) => ({
+        ...p,
+        tasks: (p.tasks || [])
+          .map((t) => ({ ...t, subtasks: (t.subtasks || []).filter((s) => checkedSet.has(s.gid)) }))
+          .filter((t) => checkedSet.has(t.gid) || t.subtasks.length > 0),
+      }))
       .filter((p) => p.tasks.length > 0)
     if (projs.length === 0) continue
 
@@ -242,21 +263,106 @@ export function buildCheckedTasksText(grouped, checkedSet, activityByGid = {}) {
     for (const p of projs) {
       lines.push(`## 프로젝트: ${p.name}`)
       for (const t of p.tasks) {
-        const meta = []
-        if (t.assignee) meta.push(`담당 ${t.assignee}`)
-        meta.push(t.changeType === 'completed' ? '완료됨' : '수정됨')
-        if (t.status) meta.push(`상태 ${t.status}`)
-        if (t.section_name) meta.push(`섹션 ${t.section_name}`)
-        lines.push(`- 태스크: ${t.name} (${meta.join(', ')})`)
-        const items = activityByGid[t.gid]?.items || []
-        for (const a of items) {
-          if (a?.text) lines.push(`    · ${a.text}`)
-        }
+        // 부모가 체크되지 않았으면 하위태스크의 소속을 알리는 제목 줄만 남긴다
+        if (checkedSet.has(t.gid)) emitTask(t, '', '태스크')
+        else lines.push(`- 태스크: ${t.name} (상위 항목 · 이번 기간 보고 대상 아님)`)
+        for (const s of t.subtasks) emitTask(s, '  ', '하위태스크')
       }
     }
     lines.push('')
   }
   return lines.join('\n').trim()
+}
+
+// ── AI 업데이트 제안 관련 ────────────────────────────────────────────
+// 에디터에 이미 내용이 있을 때: AI가 통째로 덮어쓰는 대신
+// { type:'add'|'modify', group, project, current, suggested, reason } 제안 목록을 받고,
+// 사용자가 카드 단위로 본문에 반영한다. 아래는 그 반영/매칭 헬퍼.
+
+// 공백 정규화 — 제안 문장과 본문 문장 매칭용
+export function normText(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim()
+}
+
+// 문자 bigram 자카드 유사도 (0~1) — 사용자가 문장을 다듬어도 대략적 매칭이 되게
+function textSimilarity(a, b) {
+  const grams = (s) => {
+    const set = new Set()
+    for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2))
+    return set
+  }
+  const A = grams(a), B = grams(b)
+  if (!A.size || !B.size) return 0
+  let inter = 0
+  for (const g of A) if (B.has(g)) inter++
+  return inter / (A.size + B.size - inter)
+}
+
+// 요소 목록에서 text 와 가장 비슷한 블록 하나 (threshold 미달이면 null)
+export function findBestTextBlock(elements, text, threshold = 0.45) {
+  const target = normText(text)
+  if (!target) return null
+  let best = null
+  let bestScore = 0
+  for (const el of elements) {
+    const t = normText(el.textContent)
+    if (!t) continue
+    const score = t === target ? 1
+      : (t.includes(target) || target.includes(t)) ? 0.9
+      : textSimilarity(t, target)
+    if (score > bestScore) { bestScore = score; best = el }
+  }
+  return bestScore >= threshold ? best : null
+}
+
+// "(카테고리) 내용" → "<strong>(카테고리)</strong> 내용" (초안과 같은 서식)
+function suggestionInnerHtml(suggested) {
+  const m = String(suggested || '').match(/^\(([^)]+)\)\s*([\s\S]*)$/)
+  if (m) return `<strong>(${esc(m[1])})</strong> ${esc(m[2])}`
+  return esc(suggested)
+}
+
+export function suggestionLiHtml(suggested) {
+  return `<li>${suggestionInnerHtml(suggested)}</li>`
+}
+
+// '추가' 제안 반영: 해당 프로젝트 <h3> 아래 <ul> 끝에 <li> 삽입.
+//   h3 가 없으면(본문에 아직 없는 프로젝트) 문서 끝에 h3+ul 을 새로 만든다. 항상 성공.
+export function applyAddSuggestion(html, sug) {
+  const doc = new DOMParser().parseFromString(html || '', 'text/html')
+  const body = doc.body
+  const liHtml = suggestionLiHtml(sug.suggested)
+  const h3 = findBestTextBlock([...body.querySelectorAll('h3')], sug.project, 0.5)
+  if (h3) {
+    // h3 다음 형제 중, 다음 제목이 나오기 전까지의 첫 <ul> 을 찾는다
+    let node = h3.nextElementSibling
+    let ul = null
+    while (node && !/^H[1-3]$/.test(node.tagName)) {
+      if (node.tagName === 'UL') { ul = node; break }
+      node = node.nextElementSibling
+    }
+    if (!ul) {
+      ul = doc.createElement('ul')
+      h3.insertAdjacentElement('afterend', ul)
+    }
+    ul.insertAdjacentHTML('beforeend', liHtml)
+  } else {
+    body.insertAdjacentHTML('beforeend', `<h3>${esc(sug.project || '기타')}</h3><ul>${liHtml}</ul>`)
+  }
+  return body.innerHTML
+}
+
+// '수정' 제안 반영: 본문에서 current 와 가장 비슷한 <li>/<p> 를 찾아 내용을 교체.
+//   사용자가 이미 문장을 고쳐 매칭이 불확실하면 건드리지 않고 ok:false (수동 수정 유도).
+export function applyModifySuggestion(html, sug) {
+  const cur = normText(sug.current)
+  if (!cur) return { ok: false, html }
+  const doc = new DOMParser().parseFromString(html || '', 'text/html')
+  const body = doc.body
+  const target = findBestTextBlock([...body.querySelectorAll('li, p')], cur, 0.55)
+  if (!target) return { ok: false, html }
+  target.innerHTML = suggestionInnerHtml(sug.suggested)
+  return { ok: true, html: body.innerHTML }
 }
 
 // 구버전 저장본(sections 구조) → HTML (하위호환 로드용)

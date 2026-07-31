@@ -99,6 +99,20 @@
       .rich-content code { background: #f1f5f9; padding: .1em .3em; border-radius: 4px; font-size: .9em; }
       .dark .rich-content blockquote { border-left-color: #475569; color: #94a3b8; }
       .dark .rich-content code { background: #334155; }
+      /* 주간보고 캐러셀 — lg 이상에서 패널 3개(아사나·에디터·AI제안) 중 2개만 보이도록 슬라이드.
+         트랙 너비 150% · 패널 1/3 → 한 칸 이동 = 뷰포트의 절반. 모바일은 세로로 모두 쌓인다. */
+      .carousel-track { transition: transform .45s cubic-bezier(.4, 0, .2, 1); }
+      @media (min-width: 1024px) {
+        .carousel-track { transform: translateX(var(--carousel-tx, 0%)); }
+      }
+      @media (prefers-reduced-motion: reduce) { .carousel-track { transition: none; } }
+
+      /* AI 제안 '위치/반영' 시 해당 문장 잠깐 하이라이트 */
+      .rich-content .ai-flash { animation: ai-flash 2s ease; border-radius: 4px; }
+      @keyframes ai-flash {
+        0%, 55% { background-color: rgba(99, 102, 241, .22); }
+        100% { background-color: transparent; }
+      }
       /* Placeholder(빈 에디터 안내문) */
       .rich-content p.is-editor-empty:first-child::before {
         content: attr(data-placeholder);

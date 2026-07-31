@@ -70,21 +70,74 @@ Deno.serve(async (req) => {
       await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
     }
 
-    // 태스크의 '기간 내' 변동내역(스토리) 조회 — created_at 이 [startMs, endMs] 안인 것만
-    const fetchTaskActivity = async (gid: string, startMs: number, endMs: number) => {
-      const res = await asanaGet(`/tasks/${gid}/stories?opt_fields=type,resource_subtype,text,created_at,created_by.name`)
-      return (res.data || [])
-        .filter((s: any) => {
-          const ts = s.created_at ? new Date(s.created_at).getTime() : NaN
-          return !Number.isNaN(ts) && ts >= startMs && ts <= endMs
+    // 단일 태스크의 '기간 내' 스토리(활동 로그) 조회 — created_at 이 [startMs, endMs] 안인 것만.
+    //   limit 을 명시하지 않으면 Asana 가 반환하는 페이지 크기를 보장할 수 없어(오래된 것만 오고 최근 것이
+    //   잘릴 수 있음) 명시적으로 페이지네이션한다.
+    const fetchStoriesInRange = async (gid: string, startMs: number, endMs: number) => {
+      const out: any[] = []
+      let offset: string | undefined
+      do {
+        const q = new URLSearchParams({
+          limit: '100',
+          opt_fields: 'type,resource_subtype,text,created_at,created_by.name',
         })
-        .map((s: any) => ({
-          type: s.type ?? null,
-          subtype: s.resource_subtype ?? null,
-          text: s.text ?? '',
-          created_at: s.created_at ?? null,
-          author: s.created_by?.name ?? null,
-        }))
+        if (offset) q.set('offset', offset)
+        const res = await asanaGet(`/tasks/${gid}/stories?${q.toString()}`)
+        for (const s of res.data || []) {
+          const ts = s.created_at ? new Date(s.created_at).getTime() : NaN
+          if (Number.isNaN(ts) || ts < startMs || ts > endMs) continue
+          out.push({
+            type: s.type ?? null,
+            subtype: s.resource_subtype ?? null,
+            text: s.text ?? '',
+            created_at: s.created_at ?? null,
+            author: s.created_by?.name ?? null,
+          })
+        }
+        offset = res.next_page?.offset
+      } while (offset)
+      return out
+    }
+
+    // 태스크의 '기간 내' 변동내역 — 그 태스크 자신의 스토리만.
+    //   하위태스크의 변경 이력은 하위태스크 쪽 스토리에 남으며, 'changes' 액션에서 하위태스크를
+    //   별도 카드로 내려주므로 여기서 합치지 않는다(합치면 카드와 내역이 중복된다).
+    const fetchTaskActivity = (gid: string, startMs: number, endMs: number) =>
+      fetchStoriesInRange(gid, startMs, endMs)
+
+    // 태스크의 '기간 내 변경된' 하위태스크 목록 (한 단계만).
+    //   Asana 는 하위태스크를 고치면 부모의 modified_at 도 갱신하므로, 부모가 '수정'으로 잡혔는데
+    //   정작 부모 스토리는 비어 있는 경우가 생긴다 → 실제로 바뀐 하위태스크를 찾아 함께 노출한다.
+    const fetchChangedSubtasks = async (gid: string, startMs: number, endMs: number) => {
+      const inWindow = (iso: string | null | undefined) => {
+        if (!iso) return false
+        const t = new Date(iso).getTime()
+        return !Number.isNaN(t) && t >= startMs && t <= endMs
+      }
+      const r = await asanaGet(
+        `/tasks/${gid}/subtasks?opt_fields=name,completed,completed_at,modified_at,assignee.name,resource_subtype,custom_fields.name,custom_fields.display_value`,
+      )
+      const out: any[] = []
+      for (const s of r.data || []) {
+        if (excludeMeetings && isMeeting(s.name || '')) continue
+        const completedInRange = inWindow(s.completed_at)
+        if (!completedInRange && !inWindow(s.modified_at)) continue
+        const statusField = (s.custom_fields || []).find((f: any) => f.name === '상태')
+        out.push({
+          gid: s.gid,
+          name: s.name,
+          assignee: s.assignee?.name ?? null,
+          status: statusField?.display_value ?? null,
+          section_name: null,
+          changeType: completedInRange ? 'completed' : 'modified',
+          completed_at: s.completed_at ?? null,
+          modified_at: s.modified_at ?? null,
+          is_subtask: true,
+          parent_gid: gid,
+        })
+      }
+      out.sort((a, b) => (a.changeType === b.changeType ? 0 : a.changeType === 'completed' ? -1 : 1))
+      return out
     }
 
     // 2) 대상 프로젝트 목록 조회 (list 액션 / sync 공통) — '회의록' 프로젝트는 항상 제외, archived 포함 반환
@@ -276,6 +329,9 @@ Deno.serve(async (req) => {
               changeType: completedInRange ? 'completed' : 'modified',
               completed_at: t.completed_at ?? null,
               modified_at: t.modified_at ?? null,
+              is_subtask: false,
+              parent_gid: null,
+              subtasks: [],
             })
           }
           offset = tr.next_page?.offset
@@ -289,11 +345,21 @@ Deno.serve(async (req) => {
         }
       }
 
-      // 각 변동 태스크의 기간 내 변동내역을 서버에서 병렬 조회해 함께 반환 (턴키)
+      // 기간 내 변경된 하위태스크를 부모 태스크에 붙인다 — 프론트에서 부모 아래 개별 카드로 펼쳐진다.
+      //   activity/상세보기가 부모와 동일하게 동작하도록 부모와 같은 형태로 내려보낸다.
+      const subtasks: any[] = []
+      await mapLimit(allTasks, 8, async (t) => {
+        try {
+          t.subtasks = await fetchChangedSubtasks(t.gid, startMs, endMs)
+          subtasks.push(...t.subtasks)
+        } catch { t.subtasks = [] } // 하위태스크 조회 실패는 부모 표시를 막지 않음 (best-effort)
+      })
+
+      // 각 변동 태스크(+하위태스크)의 기간 내 변동내역을 서버에서 병렬 조회해 함께 반환 (턴키)
       // → 프론트는 '가져오기' 한 번으로 목록+변동내역을 모두 확보, 태스크마다 재요청 불필요.
       // includeActivity=false 면 조회를 건너뜀(가져오기 속도 우선) → 개별 펼침 시 지연 조회로 폴백.
       if (includeActivity) {
-        await mapLimit(allTasks, 8, async (t) => {
+        await mapLimit([...allTasks, ...subtasks], 8, async (t) => {
           try { t.activity = await fetchTaskActivity(t.gid, startMs, endMs) }
           catch { t.activity = [] } // 단일 태스크 실패는 전체를 막지 않음 (best-effort)
         })

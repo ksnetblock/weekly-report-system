@@ -7,9 +7,10 @@ import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   Heading1, Heading2, Heading3, List, ListOrdered, Quote, Undo2, Redo2, Eraser,
 } from 'lucide-react'
+import { findBestTextBlock } from '../lib/weekly.js'
 
 // Tiptap 리치텍스트 에디터 — 주간보고 우측 편집기
-// ref: { getHTML(), setContent(html), insertLine(html), focus() }
+// ref: { getHTML(), getText(), setContent(html), insertLine(html), locateText(text), focus() }
 const RichEditor = forwardRef(function RichEditor({ initialHTML = '', onChange, placeholder }, ref) {
   const editor = useEditor({
     extensions: [
@@ -28,8 +29,19 @@ const RichEditor = forwardRef(function RichEditor({ initialHTML = '', onChange, 
 
   useImperativeHandle(ref, () => ({
     getHTML: () => editor?.getHTML() ?? '',
+    getText: () => editor?.getText() ?? '',
     setContent: (html) => editor?.commands.setContent(html || ''),
     insertLine: (html) => editor?.chain().focus('end').insertContent(html).run(),
+    // 본문에서 text 와 가장 비슷한 블록으로 스크롤 + 잠시 하이라이트. 찾으면 true.
+    locateText: (text) => {
+      if (!editor) return false
+      const el = findBestTextBlock(editor.view.dom.querySelectorAll('li, p, h1, h2, h3'), text, 0.4)
+      if (!el) return false
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('ai-flash')
+      setTimeout(() => el.classList.remove('ai-flash'), 2000)
+      return true
+    },
     focus: () => editor?.chain().focus().run(),
   }), [editor])
 

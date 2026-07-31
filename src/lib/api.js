@@ -96,7 +96,10 @@ export async function fetchAsanaChanges({ periodStart, periodEnd, projectGids = 
     throw new Error('Edge Function이 구버전입니다. Supabase 대시보드에서 asana-sync 함수를 재배포해주세요.')
   }
   return {
-    // [{ gid, name, tasks:[{ gid,name,assignee,status,section_name,changeType,completed_at,modified_at, activity:[{ type,subtype,text,created_at,author }] }] }]
+    // [{ gid, name, tasks:[{ gid,name,assignee,status,section_name,changeType,completed_at,modified_at,
+    //    is_subtask,parent_gid, activity:[{ type,subtype,text,created_at,author }],
+    //    subtasks:[ 같은 형태(is_subtask=true, subtasks 없음) ] }] }]
+    //   subtasks 는 '기간 내 변경된' 하위태스크만 담기며(한 단계), 부모와 동일하게 activity/상세보기가 동작한다.
     projects: data.projects,
     // 필터(회의록·보관됨 제외)를 통과한 전체 프로젝트 gid 목록 — 좌측 표시 범위 제한용 (구버전 함수면 null)
     allowedGids: Array.isArray(data.project_gids) ? data.project_gids : null,
@@ -162,6 +165,32 @@ export async function generateWeeklyDraft({ model, systemPrompt, fewShot, tasksT
     throw new Error('Edge Function(ai-draft)이 배포되지 않았거나 응답이 올바르지 않습니다.')
   }
   return data.html
+}
+
+// AI 업데이트 제안 (Claude 프록시) — ai-draft Edge Function 의 suggest 모드
+// 현재 보고서 본문(텍스트) + 체크된 태스크 데이터 → 추가/수정 제안 목록
+// [{ type:'add'|'modify', group, project, current, suggested, reason }]
+export async function generateWeeklySuggestions({ model, reportText, tasksText }) {
+  const { data, error } = await supabase.functions.invoke('ai-draft', {
+    body: {
+      password: getPassword(),
+      mode: 'suggest',
+      model,
+      report_text: reportText,
+      tasks_text: tasksText,
+    },
+  })
+  if (error) {
+    let msg = error.message || 'AI 제안 생성에 실패했습니다.'
+    try { const ctx = await error.context?.json?.(); if (ctx?.error) msg = ctx.error } catch { /* noop */ }
+    if (msg.includes('invalid_password')) { const e = new Error('비밀번호가 올바르지 않습니다.'); e.code = 'invalid_password'; throw e }
+    throw new Error(msg)
+  }
+  if (data?.error) throw new Error(data.error)
+  if (!Array.isArray(data?.suggestions)) {
+    throw new Error('Edge Function(ai-draft)이 구버전입니다. Supabase 대시보드에서 ai-draft 함수를 재배포해주세요.')
+  }
+  return data.suggestions
 }
 
 // AI 초안 설정(팀 공유) — DB 단일 행. { model, systemPrompt, fewShot } (없으면 {} 반환)
