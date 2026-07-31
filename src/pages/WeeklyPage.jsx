@@ -12,7 +12,7 @@ import DateRangePicker from '../components/DateRangePicker.jsx'
 import DatePicker from '../components/DatePicker.jsx'
 import {
   defaultReportPeriod, defaultReportDate, toBoundaryISO, groupChanges, sectionsToHtml,
-  weeklyReportTitle, NO_CHANGE, buildCheckedTasksText, AI_MODELS, DEFAULT_AI_SYSTEM_PROMPT, DEFAULT_AI_FEWSHOT,
+  weeklyReportTitle, syncTitleDate, NO_CHANGE, buildCheckedTasksText, AI_MODELS, DEFAULT_AI_SYSTEM_PROMPT, DEFAULT_AI_FEWSHOT,
   applyAddSuggestion, applyModifySuggestion,
 } from '../lib/weekly.js'
 import { exportReportDocx } from '../lib/exportDocx.js'
@@ -653,7 +653,7 @@ export default function WeeklyPage({ onAuthError }) {
               placeholder="보고서 제목"
               className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 rounded-lg text-base font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             <div className="flex items-center gap-2 flex-wrap">
-              <DatePicker value={report.report_date} onChange={(d) => setReport((r) => ({ ...r, report_date: d }))} />
+              <DatePicker value={report.report_date} onChange={(d) => setReport((r) => ({ ...r, report_date: d, title: syncTitleDate(r.title, d) }))} />
               <div className="ml-auto flex items-center gap-2">
                 <Btn onClick={onSave} primary disabled={saving}>
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} 저장

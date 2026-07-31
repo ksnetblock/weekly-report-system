@@ -87,12 +87,26 @@ export function upcomingTuesday(base = new Date()) {
   return d
 }
 
+// 'YYYY-MM-DD' → "’26.7.14" (제목에 쓰는 날짜 표기, 0패딩 없음)
+export function titleDateLabel(dateStr) {
+  const [y, m, d] = (dateStr || '').split('-').map(Number)
+  if (!y || !m || !d) return ''
+  return `’${String(y).slice(-2)}.${m}.${d}`
+}
+
 // 주간보고 기본 제목: "블록체인사업팀 주간 업무 보고 (’26.7.14)"
 //   날짜는 오늘 기준 다가올 화요일(오늘이 화요일이면 오늘).
 export function weeklyReportTitle(base = new Date()) {
-  const t = upcomingTuesday(base)
-  const yy = String(t.getFullYear()).slice(-2)
-  return `블록체인사업팀 주간 업무 보고 (’${yy}.${t.getMonth() + 1}.${t.getDate()})`
+  return `블록체인사업팀 주간 업무 보고 (${titleDateLabel(ymd(upcomingTuesday(base)))})`
+}
+
+// 제목 안의 "(’YY.M.D)" 날짜 표기를 새 보고일로 교체 (보고일 달력 변경 시 제목 동기화용).
+//   제목에 그 패턴이 없으면(사용자가 완전히 다른 형식으로 고쳤으면) 건드리지 않는다.
+export function syncTitleDate(title, dateStr) {
+  const label = titleDateLabel(dateStr)
+  if (!label) return title
+  const re = /\([’']\d{1,4}\.\d{1,2}\.\d{1,2}\)/
+  return re.test(title || '') ? title.replace(re, `(${label})`) : title
 }
 
 // HTML 특수문자 이스케이프 (에디터/문서에 안전하게 삽입)
