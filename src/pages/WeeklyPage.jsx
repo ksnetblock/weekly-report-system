@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   RefreshCw, Trash2, FilePlus2, Download, Save, CloudDownload, Loader2,
   CheckCircle2, CalendarRange, Eye, ChevronRight, Sparkles, Settings2, RotateCcw,
-  X, Copy, Crosshair, ListPlus, Replace, ChevronLeft,
+  X, Copy, CopyPlus, Crosshair, ListPlus, Replace, ChevronLeft,
 } from 'lucide-react'
 import * as api from '../lib/api.js'
 import { useToast } from '../components/Toast.jsx'
@@ -22,9 +22,11 @@ function defaultAiSettings() {
   return { model: AI_MODELS[0].id, systemPrompt: DEFAULT_AI_SYSTEM_PROMPT, fewShot: DEFAULT_AI_FEWSHOT }
 }
 
+// savedTitle: DB에 저장돼 있는 제목. 편집 중인 title 과 달라질 수 있어서,
+//   덮어쓰기 확인 문구에는 '어떤 보고서가 덮어써지는지'를 알려주는 이 값을 쓴다.
 function blankReport() {
   const d = defaultReportDate() // 보고일(하루) = 다가올 화요일
-  return { id: null, title: weeklyReportTitle(), report_date: d, html: '' }
+  return { id: null, title: weeklyReportTitle(), savedTitle: '', report_date: d, html: '' }
 }
 
 // 저장본 content → 편집기 HTML (신규는 html, 구버전은 sections 구조를 변환)
@@ -176,7 +178,7 @@ export default function WeeklyPage({ onAuthError }) {
       if (!w) { toast('없음', '보고서를 찾을 수 없습니다.', 'warning'); return }
       const html = contentToHtml(w.content)
       setReport({
-        id: w.id, title: w.title || '',
+        id: w.id, title: w.title || '', savedTitle: w.title || '',
         report_date: w.report_date || '', html,
       })
       editorRef.current?.setContent(html)
@@ -195,7 +197,7 @@ export default function WeeklyPage({ onAuthError }) {
 
   const onDeleteReport = async () => {
     if (!report.id) return
-    if (!confirm(`'${report.title}' 보고서를 삭제할까요? (되돌릴 수 없음)`)) return
+    if (!confirm(`'${report.savedTitle || report.title}' 보고서를 삭제할까요? (되돌릴 수 없음)`)) return
     try {
       await api.deleteWeeklyReport(report.id)
       toast('삭제됨', '보고서가 삭제되었습니다.', 'info')
@@ -207,20 +209,22 @@ export default function WeeklyPage({ onAuthError }) {
     }
   }
 
-  const onSave = async () => {
+  // 실제 저장 — asNew 면 id 를 빼고 보내 새 보고서(행)로 만든다.
+  const doSave = async ({ asNew = false, title } = {}) => {
     setSaving(true)
     try {
       const html = editorRef.current?.getHTML() ?? report.html
       const rdate = report.report_date || defaultReportDate() // 보고일 하루 기준
+      const nextTitle = (title ?? report.title ?? '').trim() || weeklyReportTitle()
       const payload = {
-        id: report.id || undefined,
-        title: report.title || weeklyReportTitle(),
+        id: asNew ? undefined : (report.id || undefined),
+        title: nextTitle,
         report_date: rdate,
         content: { html },
       }
       const { id } = await api.saveWeeklyReport(payload)
-      setReport((r) => ({ ...r, id, html }))
-      toast('저장됨', '주간보고가 저장되었습니다.', 'success')
+      setReport((r) => ({ ...r, id, title: nextTitle, savedTitle: nextTitle, html }))
+      toast('저장됨', asNew ? '새 보고서로 저장되었습니다.' : '주간보고가 저장되었습니다.', 'success')
       await loadReports()
     } catch (e) {
       onAuthError(e)
@@ -228,6 +232,32 @@ export default function WeeklyPage({ onAuthError }) {
     } finally {
       setSaving(false)
     }
+  }
+
+  // 저장 — 불러온 보고서를 저장하면 그 데이터를 덮어쓰므로 한 번 확인받는다.
+  //   제목/보고일을 이미 고쳤을 수 있으므로, 확인 문구에는 '저장된 제목'(savedTitle)을 쓴다.
+  const onSave = () => {
+    if (report.id) {
+      const saved = report.savedTitle || report.title
+      const next = (report.title || '').trim()
+      const renamed = next && next !== saved
+      const msg = `'${saved}' 보고서에 덮어씌워집니다.`
+        + (renamed ? `\n(제목은 '${next}' 로 바뀝니다.)` : '')
+        + `\n그대로 진행하시겠습니까?\n\n(따로 남기려면 '다른 이름으로 저장'을 사용하세요.)`
+      if (!confirm(msg)) return
+    }
+    doSave()
+  }
+
+  // 다른 이름으로 저장 — 현재 편집 내용을 별도 보고서로 새로 만든다(원본은 그대로).
+  //   제목을 이미 고쳤으면 그대로 기본값으로 쓰고, 안 고쳤으면 '(사본)'을 붙여 구분한다.
+  const onSaveAs = () => {
+    const cur = (report.title || '').trim() || weeklyReportTitle()
+    const suggested = cur !== (report.savedTitle || '') ? cur : `${cur} (사본)`
+    const input = prompt('새 보고서 제목을 입력하세요.', suggested)
+    if (input === null) return // 취소
+    if (!input.trim()) { toast('제목 필요', '제목을 입력하세요.', 'warning'); return }
+    doSave({ asNew: true, title: input.trim() })
   }
 
   const onExport = async () => {
@@ -655,9 +685,16 @@ export default function WeeklyPage({ onAuthError }) {
             <div className="flex items-center gap-2 flex-wrap">
               <DatePicker value={report.report_date} onChange={(d) => setReport((r) => ({ ...r, report_date: d, title: syncTitleDate(r.title, d) }))} />
               <div className="ml-auto flex items-center gap-2">
-                <Btn onClick={onSave} primary disabled={saving}>
+                <Btn onClick={onSave} primary disabled={saving}
+                  title={report.id ? `'${report.savedTitle || report.title}' 보고서를 덮어씁니다` : '새 보고서로 저장합니다'}>
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} 저장
                 </Btn>
+                {report.id && (
+                  <Btn onClick={onSaveAs} disabled={saving}
+                    title="원본은 그대로 두고, 현재 내용을 새 보고서로 저장합니다">
+                    <CopyPlus className="w-4 h-4" /> 다른 이름으로 저장
+                  </Btn>
+                )}
                 <Btn onClick={onExport}><Download className="w-4 h-4" /> DOCX 내보내기</Btn>
               </div>
             </div>
@@ -1074,12 +1111,12 @@ function EmptyHint({ icon: Icon, text }) {
   )
 }
 
-function Btn({ children, onClick, primary, disabled, full }) {
+function Btn({ children, onClick, primary, disabled, full, title }) {
   const cls = primary
     ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-100 dark:shadow-none'
     : 'border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
   return (
-    <button onClick={onClick} disabled={disabled}
+    <button onClick={onClick} disabled={disabled} title={title}
       className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition disabled:opacity-50 ${cls} ${full ? 'w-full' : ''}`}>
       {children}
     </button>
