@@ -131,14 +131,14 @@ export async function exportReportDocx(content) {
     // font 만 넣으면 기본 크기·색상이 사라진다 → 라이브러리 기본값(size/color)을 함께 명시.
     styles: {
       default: {
-        document: { run: { font: FONT, size: 18 } }, // 본문 9pt (원본 보고서 양식과 동일)
-        title: { run: { font: FONT_TITLE, size: 30 } }, // 15pt, ExtraBold
-        heading1: { run: { font: FONT_HEADING, size: 28, color: '2E74B5' } }, // 14pt, SemiBold
-        heading2: { run: { font: FONT_HEADING, size: 26, color: '2E74B5' } }, // 13pt, SemiBold
-        heading3: { run: { font: FONT_HEADING, size: 24, color: '1F4D78' } }, // 12pt, SemiBold
-        heading4: { run: { font: FONT_HEADING, color: '2E74B5', italics: true } },
-        heading5: { run: { font: FONT_HEADING, color: '2E74B5' } },
-        heading6: { run: { font: FONT_HEADING, color: '1F4D78' } },
+        document: { run: { font: FONT, size: 18, color: '000000' } }, // 본문 9pt (원본 보고서 양식과 동일)
+        title: { run: { font: FONT_TITLE, size: 30, color: '000000' } }, // 15pt, ExtraBold
+        heading1: { run: { font: FONT_HEADING, size: 28, color: '000000' } }, // 14pt, SemiBold
+        heading2: { run: { font: FONT_HEADING, size: 26, color: '000000' } }, // 13pt, SemiBold
+        heading3: { run: { font: FONT_HEADING, size: 24, color: '000000' } }, // 12pt, SemiBold
+        heading4: { run: { font: FONT_HEADING, color: '000000', italics: true } },
+        heading5: { run: { font: FONT_HEADING, color: '000000' } },
+        heading6: { run: { font: FONT_HEADING, color: '000000' } },
       },
     },
     numbering: {
